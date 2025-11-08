@@ -1,3 +1,5 @@
 dashscope>=1.17.0
+requests>=2.31.0
+ollama>=0.1.0
 
 
