@@ -5,19 +5,40 @@
 """
 
 import ollama
+import requests
 
 
-def call_deepseek(prompt: str, model: str = "deepseek-chat"):
+def get_available_deepseek_model():
+    """
+    获取可用的 DeepSeek 模型名称
+    
+    Returns:
+        第一个可用的 DeepSeek 模型名称，如果没有则返回 None
+    """
+    try:
+        response = requests.get("http://localhost:11434/api/tags", timeout=2)
+        models = response.json().get("models", [])
+        deepseek_models = [m["name"] for m in models if "deepseek" in m["name"].lower()]
+        if deepseek_models:
+            return deepseek_models[0]
+    except:
+        pass
+    return None
+
+
+def call_deepseek(prompt: str, model: str = None):
     """
     简单调用 DeepSeek
     
     Args:
         prompt: 用户输入
-        model: 模型名称（deepseek-chat, deepseek-r1 等）
+        model: 模型名称（deepseek-chat, deepseek-r1 等），如果为 None 则自动检测
     
     Returns:
         模型响应
     """
+    if model is None:
+        model = get_available_deepseek_model() or "deepseek-r1:8b"
     response = ollama.generate(
         model=model,
         prompt=prompt
@@ -25,17 +46,19 @@ def call_deepseek(prompt: str, model: str = "deepseek-chat"):
     return response['response']
 
 
-def chat_deepseek(messages: list, model: str = "deepseek-chat"):
+def chat_deepseek(messages: list, model: str = None):
     """
     多轮对话
     
     Args:
         messages: 消息列表，格式: [{"role": "user", "content": "..."}, ...]
-        model: 模型名称
+        model: 模型名称，如果为 None 则自动检测
     
     Returns:
         模型响应
     """
+    if model is None:
+        model = get_available_deepseek_model() or "deepseek-r1:8b"
     response = ollama.chat(
         model=model,
         messages=messages
@@ -43,17 +66,19 @@ def chat_deepseek(messages: list, model: str = "deepseek-chat"):
     return response['message']['content']
 
 
-def chat_deepseek_stream(messages: list, model: str = "deepseek-chat"):
+def chat_deepseek_stream(messages: list, model: str = None):
     """
     流式多轮对话
     
     Args:
         messages: 消息列表
-        model: 模型名称
+        model: 模型名称，如果为 None 则自动检测
     
     Yields:
         每次生成的文本片段
     """
+    if model is None:
+        model = get_available_deepseek_model() or "deepseek-r1:8b"
     stream = ollama.chat(
         model=model,
         messages=messages,
