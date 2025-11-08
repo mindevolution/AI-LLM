@@ -90,6 +90,97 @@ def chat_deepseek_stream(messages: list, model: str = None):
             yield chunk['message']['content']
 
 
+def chat_deepseek_with_tools(messages: list, tools: list = None, model: str = None):
+    """
+    带工具调用的多轮对话
+    
+    Args:
+        messages: 消息列表，格式: [{"role": "user", "content": "..."}, ...]
+        tools: 工具/函数定义列表，格式参考 Ollama tools 规范
+        model: 模型名称，如果为 None 则自动检测
+    
+    Returns:
+        完整的响应对象，包含 message 和可能的 tool_calls
+    """
+    if model is None:
+        model = get_available_deepseek_model() or "deepseek-r1:8b"
+    
+    params = {
+        "model": model,
+        "messages": messages
+    }
+    
+    if tools:
+        params["tools"] = tools
+    
+    response = ollama.chat(**params)
+    return response
+
+
+def run_conversation_with_tools(user_query: str, tools: list, tool_functions: dict, model: str = None, max_iterations: int = 5):
+    """
+    运行带工具调用的完整对话流程
+    
+    Args:
+        user_query: 用户查询
+        tools: 工具定义列表（Ollama 格式）
+        tool_functions: 工具函数字典，格式: {"function_name": callable_function}
+        model: 模型名称，如果为 None 则自动检测
+        max_iterations: 最大迭代次数，防止无限循环
+    
+    Returns:
+        最终响应内容
+    """
+    if model is None:
+        model = get_available_deepseek_model() or "deepseek-r1:8b"
+    
+    messages = [{"role": "user", "content": user_query}]
+    
+    for iteration in range(max_iterations):
+        # 调用模型
+        response = chat_deepseek_with_tools(messages, tools=tools, model=model)
+        assistant_message = response.get('message', {})
+        messages.append(assistant_message)
+        
+        # 检查是否有工具调用
+        tool_calls = assistant_message.get('tool_calls', [])
+        
+        if not tool_calls:
+            # 没有工具调用，返回最终响应
+            return assistant_message.get('content', '')
+        
+        # 处理每个工具调用
+        for tool_call in tool_calls:
+            function_name = tool_call.get('function', {}).get('name')
+            function_args = tool_call.get('function', {}).get('arguments', '{}')
+            
+            if function_name in tool_functions:
+                # 执行工具函数
+                import json
+                try:
+                    args = json.loads(function_args) if isinstance(function_args, str) else function_args
+                    tool_result = tool_functions[function_name](**args)
+                except Exception as e:
+                    tool_result = f"Error executing {function_name}: {str(e)}"
+                
+                # 添加工具结果到消息历史
+                messages.append({
+                    "role": "tool",
+                    "name": function_name,
+                    "content": str(tool_result)
+                })
+            else:
+                # 工具函数不存在
+                messages.append({
+                    "role": "tool",
+                    "name": function_name,
+                    "content": f"Function {function_name} not found"
+                })
+    
+    # 如果达到最大迭代次数，返回最后一条消息
+    return messages[-1].get('content', 'Max iterations reached')
+
+
 # ========== 示例使用 ==========
 if __name__ == "__main__":
     # 示例 1: 简单调用
@@ -127,4 +218,11 @@ if __name__ == "__main__":
     for chunk in chat_deepseek_stream(messages):
         print(chunk, end="", flush=True)
     print("\n")
+    
+    # 示例 4: Function Calling（需要支持工具调用的模型）
+    print("=" * 50)
+    print("示例 4: Function Calling")
+    print("=" * 50)
+    print("注意: Function Calling 示例请参考 ollama_deep_seek_function_call.py")
+    print("需要支持工具调用的模型，如: deepseek-r1 或 MFDoom/deepseek-r1-tool-calling\n")
 
